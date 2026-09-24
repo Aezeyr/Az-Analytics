@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { supabase } from './supabase';
 import { UserProfile } from './types';
 import { authService } from './services/auth/authService';
 import { Navbar } from './components/layout/Navbar';
@@ -35,7 +36,7 @@ export default function App() {
 
   const handleOpenGoogleAuth = async () => {
     try {
-      const res = await authService.signInWithGoogle();
+      const res = await supabase.auth.signInWithOAuth({ provider: 'google'})
       if (res.user) {
         setCurrentUser(res.user);
         setActiveTab('dashboard');
