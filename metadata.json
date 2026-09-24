@@ -1,0 +1,7 @@
+{
+  "name": "AZ Analytics",
+  "description": "Facebook Page analytics and audit platform with competitor benchmarking and date-range performance reporting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
