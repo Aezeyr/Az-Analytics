@@ -1,7 +1,13 @@
 import { UserProfile } from '../../types';
-import { getSupabaseConfig, isSupabaseConfigured } from '../supabaseClient';
+import {
+  getSupabaseConfig,
+  isSupabaseConfigured,
+  getGoogleOAuthUrl,
+  fetchSupabaseUser,
+} from '../../lib/supabase';
 
 const AUTH_STORAGE_KEY = 'az_analytics_current_user';
+const AUTH_TOKEN_KEY = 'az_analytics_access_token';
 type AuthStateCallback = (user: UserProfile | null) => void;
 
 class AuthService {
@@ -10,6 +16,7 @@ class AuthService {
 
   constructor() {
     this.loadInitialUser();
+    this.handleOAuthRedirect();
   }
 
   private loadInitialUser() {
@@ -20,6 +27,88 @@ class AuthService {
       }
     } catch {
       this.currentUser = null;
+    }
+  }
+
+  /**
+   * Detects and processes OAuth redirect from Supabase / Google Sign-In
+   * Handles hash fragments (#access_token=... or #error=...) in live production environments
+   */
+  private async handleOAuthRedirect() {
+    if (typeof window === 'undefined') return;
+
+    try {
+      const hash = window.location.hash.startsWith('#')
+        ? window.location.hash.substring(1)
+        : window.location.hash;
+
+      if (!hash) return;
+
+      const params = new URLSearchParams(hash);
+      const accessToken = params.get('access_token');
+      const errorDescription = params.get('error_description') || params.get('error');
+
+      if (errorDescription) {
+        console.error('[Supabase OAuth Error]:', errorDescription);
+        // Clean URL so error doesn't persist
+        window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
+        return;
+      }
+
+      if (accessToken) {
+        localStorage.setItem(AUTH_TOKEN_KEY, accessToken);
+
+        // Immediate extraction from JWT payload to prevent UI flash/delays
+        let profileFromJwt: Partial<UserProfile> | null = null;
+        try {
+          const parts = accessToken.split('.');
+          if (parts.length === 3) {
+            const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+            profileFromJwt = {
+              id: payload.sub,
+              email: payload.email,
+              fullName: payload.user_metadata?.full_name || payload.user_metadata?.name || payload.email?.split('@')[0],
+              avatarUrl: payload.user_metadata?.avatar_url || payload.user_metadata?.picture,
+            };
+          }
+        } catch {
+          // Ignore JWT decode failure and rely on fetch
+        }
+
+        // Clean the URL hash immediately to prevent token exposure in address bar
+        window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
+
+        // Fetch authoritative user profile from Supabase
+        const supabaseUser = await fetchSupabaseUser(accessToken);
+
+        const email = supabaseUser?.email || profileFromJwt?.email || 'user@example.com';
+        const fullName =
+          supabaseUser?.user_metadata?.full_name ||
+          supabaseUser?.user_metadata?.name ||
+          profileFromJwt?.fullName ||
+          email.split('@')[0];
+        const avatarUrl =
+          supabaseUser?.user_metadata?.avatar_url ||
+          supabaseUser?.user_metadata?.picture ||
+          profileFromJwt?.avatarUrl ||
+          `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fullName)}`;
+
+        const authenticatedUser: UserProfile = {
+          id: supabaseUser?.id || profileFromJwt?.id || 'usr_' + Math.random().toString(36).substring(2, 9),
+          email,
+          fullName,
+          avatarUrl,
+          createdAt: supabaseUser?.created_at || new Date().toISOString(),
+          role: 'Account Owner',
+          isDemoUser: false,
+        };
+
+        this.currentUser = authenticatedUser;
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authenticatedUser));
+        this.notify();
+      }
+    } catch (err) {
+      console.error('[AuthService] Error parsing OAuth redirect callback:', err);
     }
   }
 
@@ -45,13 +134,19 @@ class AuthService {
 
   /**
    * Primary authentication method: "Continue with Google"
-   * When Supabase credentials are configured, this can invoke Supabase OAuth flow:
-   * supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })
+   * In production with Supabase configured: redirects to Google OAuth
+   * In Demo Mode without Supabase keys: signs in with transparent demo session
    */
-  public async signInWithGoogle(): Promise<{ user: UserProfile; error?: string }> {
+  public async signInWithGoogle(): Promise<{ user?: UserProfile; error?: string }> {
     if (isSupabaseConfigured()) {
-      // Supabase OAuth redirection flow structure
-      // window.location.href = `${getSupabaseConfig().url}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(window.location.origin)}`;
+      try {
+        const oauthUrl = getGoogleOAuthUrl();
+        window.location.href = oauthUrl;
+        return {};
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Unable to initiate Google sign-in';
+        return { error: message };
+      }
     }
 
     // In demo/pre-Supabase mode, provide seamless real user session with Google identity simulation
@@ -73,7 +168,7 @@ class AuthService {
 
   public async signInWithEmail(email: string, _password?: string): Promise<{ user: UserProfile; error?: string }> {
     if (!email || !email.includes('@')) {
-      return { user: null as any, error: 'Please enter a valid email address.' };
+      return { user: null as unknown as UserProfile, error: 'Please enter a valid email address.' };
     }
 
     const emailUser: UserProfile = {
@@ -94,7 +189,7 @@ class AuthService {
 
   public async signUpWithEmail(email: string, _password: string, fullName: string): Promise<{ user: UserProfile; error?: string }> {
     if (!email || !email.includes('@')) {
-      return { user: null as any, error: 'Please enter a valid email address.' };
+      return { user: null as unknown as UserProfile, error: 'Please enter a valid email address.' };
     }
 
     const newUser: UserProfile = {
@@ -116,6 +211,7 @@ class AuthService {
   public async signOut(): Promise<void> {
     this.currentUser = null;
     localStorage.removeItem(AUTH_STORAGE_KEY);
+    localStorage.removeItem(AUTH_TOKEN_KEY);
     this.notify();
   }
 
