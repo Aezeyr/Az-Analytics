@@ -37,7 +37,7 @@ export const isSupabaseConfigured = (): boolean => {
 
 /**
  * Builds the Google OAuth authorize URL for Supabase Auth GoTrue.
- * Redirects cleanly back to the application's origin/current pathname on Cloudflare Pages.
+ * Redirects cleanly back to the application's origin on Cloudflare Pages/Workers.
  */
 export const getGoogleOAuthUrl = (redirectTo?: string): string => {
   const config = getSupabaseConfig();
@@ -45,12 +45,12 @@ export const getGoogleOAuthUrl = (redirectTo?: string): string => {
     throw new Error('Supabase is not configured. Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY.');
   }
 
-  // Use the current origin and path, stripping hashes and query parameters for clean callback
+  // Always redirect strictly to the domain root or explicit URL
   const targetRedirect =
     redirectTo ||
     (typeof window !== 'undefined'
-      ? `${window.location.origin}${window.location.pathname}`.replace(/\/+$/, '') || window.location.origin
-      : '');
+      ? window.location.origin
+      : 'https://az-analytics.aezeyr7.workers.dev');
 
   const params = new URLSearchParams({
     provider: 'google',
