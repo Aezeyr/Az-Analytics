@@ -94,3 +94,16 @@ export const signInWithGoogleOAuth = async (customRedirectTo?: string) => {
 
   return data;
 };
+
+// --- Added missing exports to fix Cloudflare Build Error ---
+export const getGoogleOAuthUrl = (): string => {
+  const config = getSupabaseConfig();
+  const redirectUrl = typeof window !== 'undefined' ? `${window.location.origin}/` : '';
+  return `${config.url}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(redirectUrl)}`;
+};
+
+export const fetchSupabaseUser = async () => {
+  const client = getSupabaseClient() || supabase;
+  const { data } = await client.auth.getUser();
+  return data.user;
+};
