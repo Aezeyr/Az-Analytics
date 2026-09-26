@@ -1,11 +1,4 @@
-/**
- * Supabase Client & OAuth Configuration for AZ Analytics
- * Cloudflare Pages & Production Environment Ready
- *
- * Environment variables:
- * - VITE_SUPABASE_URL: Your Supabase Project URL (e.g. https://xyz.supabase.co)
- * - VITE_SUPABASE_ANON_KEY: Your Supabase Anonymous/Public API Key
- */
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 export interface SupabaseConfig {
   url: string;
@@ -24,79 +17,80 @@ export const getSupabaseConfig = (): SupabaseConfig => {
     anonKey.length > 20
   );
 
-  return {
-    url,
-    anonKey,
-    isConfigured,
-  };
+  return { url, anonKey, isConfigured };
 };
 
 export const isSupabaseConfigured = (): boolean => {
   return getSupabaseConfig().isConfigured;
 };
 
-/**
- * Builds the Google OAuth authorize URL for Supabase Auth GoTrue.
- * Redirects cleanly back to the application's origin on Cloudflare Pages/Workers.
- */
-export const getGoogleOAuthUrl = (redirectTo?: string): string => {
+let cachedClient: SupabaseClient | null = null;
+
+export const getSupabaseClient = (): SupabaseClient | null => {
+  const config = getSupabaseConfig();
+  if (!config.isConfigured) return null;
+
+  if (!cachedClient) {
+    cachedClient = createClient(config.url, config.anonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        flowType: 'pkce',
+        storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+      },
+    });
+  }
+  return cachedClient;
+};
+
+export const supabase: SupabaseClient = (() => {
+  const active = getSupabaseClient();
+  if (active) return active;
+
+  return createClient(
+    'https://placeholder-project.supabase.co',
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder-anon-key',
+    {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    }
+  );
+})();
+
+export const signInWithGoogleOAuth = async (customRedirectTo?: string) => {
   const config = getSupabaseConfig();
   if (!config.isConfigured) {
     throw new Error('Supabase is not configured. Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY.');
   }
 
-  // Always redirect strictly to the domain root or explicit URL
-  const targetRedirect =
-    redirectTo ||
-    (typeof window !== 'undefined'
-      ? window.location.origin
-      : 'https://az-analytics.aezeyr7.workers.dev');
+  const client = getSupabaseClient() || supabase;
+  const redirectTarget =
+    customRedirectTo ||
+    (typeof window !== 'undefined' ? `${window.location.origin}/` : undefined);
 
-  const params = new URLSearchParams({
+  const { data, error } = await client.auth.signInWithOAuth({
     provider: 'google',
-    redirect_to: targetRedirect,
-    apikey: config.anonKey,
+    options: {
+      redirectTo: redirectTarget,
+      queryParams: {
+        access_type: 'offline',
+        prompt: 'select_account',
+      },
+    },
   });
 
-  return `${config.url}/auth/v1/authorize?${params.toString()}`;
-};
-
-export interface SupabaseAuthUser {
-  id: string;
-  email?: string;
-  user_metadata?: {
-    full_name?: string;
-    name?: string;
-    avatar_url?: string;
-    picture?: string;
-    [key: string]: unknown;
-  };
-  created_at?: string;
-}
-
-/**
- * Fetches user profile from Supabase Auth REST endpoint using access token
- */
-export const fetchSupabaseUser = async (accessToken: string): Promise<SupabaseAuthUser | null> => {
-  const config = getSupabaseConfig();
-  if (!config.isConfigured) return null;
-
-  try {
-    const res = await fetch(`${config.url}/auth/v1/user`, {
-      headers: {
-        apikey: config.anonKey,
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
-
-    if (!res.ok) {
-      console.warn('[Supabase Auth] Failed to fetch user profile:', res.status, res.statusText);
-      return null;
-    }
-
-    return await res.json();
-  } catch (err) {
-    console.error('[Supabase Auth] Network error fetching user profile:', err);
-    return null;
+  if (error) {
+    console.error('[Supabase OAuth Error]:', error.message);
+    throw error;
   }
+
+  if (data?.url && typeof window !== 'undefined') {
+    window.location.assign(data.url);
+  }
+
+  return data;
 };
