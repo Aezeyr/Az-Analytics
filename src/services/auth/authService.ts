@@ -19,7 +19,6 @@ class AuthService {
   constructor() {
     this.loadInitialUser();
     this.initSupabaseAuthListener();
-    this.cleanupAuthParams();
   }
 
   private loadInitialUser() {
@@ -133,6 +132,40 @@ class AuthService {
     }
   }
 
+  /**
+   * Reads any OAuth error returned in the URL query or hash fragment.
+   */
+  public checkUrlAuthError(): string | null {
+    if (typeof window === 'undefined') return null;
+
+    try {
+      const url = new URL(window.location.href);
+
+      // Check query parameters
+      if (url.searchParams.has('error_description')) {
+        return url.searchParams.get('error_description') || null;
+      }
+      if (url.searchParams.has('error')) {
+        return url.searchParams.get('error') || null;
+      }
+
+      // Check hash fragment
+      if (url.hash) {
+        const hashStr = url.hash.startsWith('#') ? url.hash.substring(1) : url.hash;
+        const hashParams = new URLSearchParams(hashStr);
+        if (hashParams.has('error_description')) {
+          return hashParams.get('error_description') || null;
+        }
+        if (hashParams.has('error')) {
+          return hashParams.get('error') || null;
+        }
+      }
+    } catch {
+      // Ignore
+    }
+    return null;
+  }
+
   public getCurrentUser(): UserProfile | null {
     return this.currentUser;
   }
@@ -157,10 +190,10 @@ class AuthService {
    * Initiates real Google OAuth flow with Supabase.
    * Performs direct OAuth redirect to Google without mock fallback.
    */
-  public async signInWithGoogle(): Promise<{ user?: UserProfile; error?: string }> {
+  public async signInWithGoogle(): Promise<{ user?: UserProfile; error?: string; url?: string }> {
     try {
-      await signInWithGoogleOAuth();
-      return {};
+      const data = await signInWithGoogleOAuth();
+      return { url: data?.url };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unable to initiate Google sign-in';
       console.error('[Supabase OAuth Trigger Error]:', message);

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { AlertCircle, X } from 'lucide-react';
 import { supabase } from './supabase';
 import { UserProfile } from './types';
 import { authService } from './services/auth/authService';
@@ -17,10 +18,15 @@ import { ProtectedGateModal } from './components/common/ProtectedGateModal';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => authService.getCurrentUser());
+  const [authError, setAuthError] = useState<string | null>(() => authService.checkUrlAuthError());
+  const [isSigningInGoogle, setIsSigningInGoogle] = useState(false);
   const [activeTab, setActiveTab] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       const hash = window.location.hash;
       const search = window.location.search;
+      if (search.includes('error=') || hash.includes('error=')) {
+        return 'landing';
+      }
       if (
         hash.includes('access_token') ||
         hash.includes('refresh_token') ||
@@ -48,10 +54,19 @@ export default function App() {
   }, [activeTab]);
 
   const handleOpenGoogleAuth = async () => {
+    setIsSigningInGoogle(true);
+    setAuthError(null);
     try {
-      await authService.signInWithGoogle();
+      const res = await authService.signInWithGoogle();
+      if (res?.error) {
+        setAuthError(res.error);
+        setIsSigningInGoogle(false);
+      }
     } catch (err) {
+      const message = err instanceof Error ? err.message : 'Google sign-in failed to initiate. Please try again.';
       console.error('[App] Google OAuth failed to initiate:', err);
+      setAuthError(message);
+      setIsSigningInGoogle(false);
     }
   };
 
@@ -86,13 +101,34 @@ export default function App() {
         activeTab={activeTab}
       />
 
+      {/* Global Authentication Error Alert if activeTab is not landing */}
+      {authError && activeTab !== 'landing' && (
+        <div className="bg-rose-950/90 border-b border-rose-800 text-rose-100 px-4 py-2.5 text-xs flex items-center justify-between shadow-md">
+          <div className="flex items-center gap-2 max-w-7xl mx-auto w-full justify-between">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+              <span><b>Authentication Notice:</b> {authError}</span>
+            </div>
+            <button
+              onClick={() => setAuthError(null)}
+              className="text-rose-300 hover:text-white p-1 rounded transition-colors cursor-pointer"
+              aria-label="Dismiss error"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main View Render */}
       {activeTab === 'landing' ? (
         <main className="flex-1">
           <LandingPage
             onEnterDemo={handleEnterDemo}
             onOpenGoogleAuth={handleOpenGoogleAuth}
-            onOpenEmailAuth={() => setIsAuthModalOpen(true)}
+            authError={authError}
+            onClearAuthError={() => setAuthError(null)}
+            isSigningInGoogle={isSigningInGoogle}
           />
         </main>
       ) : (

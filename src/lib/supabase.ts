@@ -53,6 +53,7 @@ export const signInWithGoogleOAuth = async (customRedirectTo?: string) => {
     provider: 'google',
     options: {
       redirectTo: redirectTarget,
+      skipBrowserRedirect: true,
       queryParams: {
         access_type: 'offline',
         prompt: 'select_account',
@@ -66,7 +67,16 @@ export const signInWithGoogleOAuth = async (customRedirectTo?: string) => {
   }
 
   if (data?.url && typeof window !== 'undefined') {
-    window.location.assign(data.url);
+    // Attempt top-level navigation first to prevent iframe embedding blocks from Google OAuth
+    try {
+      if (window.top && window.top !== window) {
+        window.top.location.href = data.url;
+      } else {
+        window.location.assign(data.url);
+      }
+    } catch {
+      window.location.assign(data.url);
+    }
   }
 
   return data;

@@ -15,19 +15,25 @@ import {
   Sliders,
   ChevronRight,
   TrendingUp,
+  AlertCircle,
+  X,
 } from 'lucide-react';
 import { DemoBadge } from '../common/DemoBadge';
 
 interface LandingPageProps {
   onEnterDemo: (featureTab?: string) => void;
   onOpenGoogleAuth: () => void;
-  onOpenEmailAuth: () => void;
+  authError?: string | null;
+  onClearAuthError?: () => void;
+  isSigningInGoogle?: boolean;
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({
   onEnterDemo,
   onOpenGoogleAuth,
-  onOpenEmailAuth,
+  authError,
+  onClearAuthError,
+  isSigningInGoogle,
 }) => {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 selection:bg-blue-600 selection:text-white">
@@ -59,9 +65,31 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             Smart Facebook Page analytics, competitor insights, and performance reports in one place.
           </p>
 
-          {/* Call to actions */}
+          {/* Error Notice Display if Supabase or OAuth returns an error */}
+          {authError && (
+            <div className="mt-6 max-w-md mx-auto p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl text-left flex items-start gap-3 shadow-lg shadow-rose-950/30 animate-in fade-in slide-in-from-top-2 duration-200">
+              <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-rose-200">Google Authentication Notice</p>
+                <p className="text-xs text-rose-300/90 mt-0.5 leading-relaxed break-words">{authError}</p>
+              </div>
+              {onClearAuthError && (
+                <button
+                  type="button"
+                  onClick={onClearAuthError}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors cursor-pointer"
+                  aria-label="Dismiss error"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Exactly Two Landing-Page CTA Buttons: Try Demo and Sign in with Google */}
           <div className="mt-9 flex flex-col sm:flex-row items-center justify-center gap-3.5 max-w-md mx-auto">
             <button
+              type="button"
               onClick={() => onEnterDemo('dashboard')}
               className="w-full sm:w-auto px-7 py-3.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm transition-all shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 group cursor-pointer"
             >
@@ -71,32 +99,42 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
             <button
               type="button"
+              disabled={isSigningInGoogle}
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 onOpenGoogleAuth();
               }}
-              className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700/80 font-semibold text-sm transition-all flex items-center justify-center gap-2.5 cursor-pointer shadow-xs hover:border-slate-600"
+              className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700/80 font-semibold text-sm transition-all flex items-center justify-center gap-2.5 cursor-pointer shadow-xs hover:border-slate-600 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <svg className="w-4 h-4" viewBox="0 0 24 24">
-                <path
-                  fill="#4285F4"
-                  d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.34 24 12 24z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
-                />
-                <path
-                  fill="#EA4335"
-                  d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
-                />
-              </svg>
-              <span>Sign in with Google</span>
+              {isSigningInGoogle ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-slate-400 border-t-white rounded-full animate-spin shrink-0" />
+                  <span>Connecting to Google...</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                    <path
+                      fill="#4285F4"
+                      d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
+                    />
+                    <path
+                      fill="#34A853"
+                      d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.34 24 12 24z"
+                    />
+                    <path
+                      fill="#FBBC05"
+                      d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
+                    />
+                    <path
+                      fill="#EA4335"
+                      d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
+                    />
+                  </svg>
+                  <span>Sign in with Google</span>
+                </>
+              )}
             </button>
           </div>
 

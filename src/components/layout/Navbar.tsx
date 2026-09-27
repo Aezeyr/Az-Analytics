@@ -37,8 +37,8 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className="sticky top-0 z-40 w-full bg-slate-900 border-b border-slate-800 text-white shadow-xs">
-      {/* Top Demo Banner if in Demo Mode */}
-      {isDemoMode && (
+      {/* Top Demo Banner if in Demo Mode and not on Landing Page */}
+      {isDemoMode && activeTab !== 'landing' && (
         <div className="bg-gradient-to-r from-amber-600 via-amber-700 to-amber-600 text-amber-50 px-4 py-1.5 text-xs font-medium flex items-center justify-between">
           <div className="flex items-center gap-2 max-w-4xl mx-auto w-full justify-between">
             <div className="flex items-center gap-2">
@@ -209,14 +209,14 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
               )}
             </div>
-          ) : (
+          ) : activeTab !== 'landing' ? (
             <div className="flex items-center gap-2">
               <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-mono font-medium rounded-full bg-slate-800/80 text-slate-400 border border-slate-700/60">
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
                 Demo Workspace
               </span>
             </div>
-          )}
+          ) : null}
         </div>
       </div>
     </header>
