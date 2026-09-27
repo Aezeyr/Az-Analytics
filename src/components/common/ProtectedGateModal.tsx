@@ -64,11 +64,13 @@ export const ProtectedGateModal: React.FC<ProtectedGateModalProps> = ({
 
           <div className="space-y-3">
             <button
-              onClick={() => {
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
                 onGoogleSignIn();
                 onClose();
               }}
-              className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold text-sm rounded-xl transition-all shadow-md shadow-blue-600/20 hover:shadow-lg"
+              className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold text-sm rounded-xl transition-all shadow-md shadow-blue-600/20 hover:shadow-lg cursor-pointer"
             >
               <svg className="w-5 h-5 bg-white rounded-full p-0.5" viewBox="0 0 24 24">
                 <path

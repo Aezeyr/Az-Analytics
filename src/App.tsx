@@ -17,7 +17,20 @@ import { ProtectedGateModal } from './components/common/ProtectedGateModal';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => authService.getCurrentUser());
-  const [activeTab, setActiveTab] = useState<string>('landing');
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash;
+      const search = window.location.search;
+      if (
+        hash.includes('access_token') ||
+        hash.includes('refresh_token') ||
+        search.includes('code=')
+      ) {
+        return 'dashboard';
+      }
+    }
+    return authService.getCurrentUser() ? 'dashboard' : 'landing';
+  });
   const [isSidebarMobileOpen, setIsSidebarMobileOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isProtectedGateOpen, setIsProtectedGateOpen] = useState(false);

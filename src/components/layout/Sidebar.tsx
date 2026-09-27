@@ -107,8 +107,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
               Guest Demo Mode
             </span>
             <button
-              onClick={onOpenGoogleAuth}
-              className="w-full py-1.5 px-3 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg transition-colors flex items-center justify-center gap-1.5"
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                onOpenGoogleAuth();
+              }}
+              className="w-full py-1.5 px-3 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <span>Sign in with Google</span>
             </button>

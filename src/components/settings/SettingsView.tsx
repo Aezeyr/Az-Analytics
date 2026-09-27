@@ -13,6 +13,7 @@ import {
   ExternalLink,
   Code,
   Globe,
+  Key,
 } from 'lucide-react';
 import { UserProfile, UserSettings } from '../../types';
 import { databaseService } from '../../services/database/databaseService';
@@ -110,6 +111,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <span>Required Env: </span>
               <span className="text-slate-300">VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY</span>
             </div>
+            {!currentUser && (
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onOpenGoogleAuth();
+                  }}
+                  className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  <Key className="w-3.5 h-3.5" />
+                  <span>Sign in with Google</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Meta Graph API Status */}

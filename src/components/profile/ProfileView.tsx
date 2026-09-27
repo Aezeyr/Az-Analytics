@@ -42,8 +42,12 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
           {!currentUser && (
             <button
-              onClick={onOpenGoogleAuth}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors"
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                onOpenGoogleAuth();
+              }}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors cursor-pointer"
             >
               Sign in with Google
             </button>

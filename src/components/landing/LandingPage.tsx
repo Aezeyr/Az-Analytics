@@ -70,7 +70,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </button>
 
             <button
-              onClick={onOpenGoogleAuth}
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                onOpenGoogleAuth();
+              }}
               className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700/80 font-semibold text-sm transition-all flex items-center justify-center gap-2.5 cursor-pointer"
             >
               <svg className="w-4 h-4" viewBox="0 0 24 24">
@@ -398,7 +402,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             <button onClick={() => onEnterDemo('dashboard')} className="hover:text-slate-300 transition-colors">
               Demo Dashboard
             </button>
-            <button onClick={onOpenGoogleAuth} className="hover:text-slate-300 transition-colors">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                onOpenGoogleAuth();
+              }}
+              className="hover:text-slate-300 transition-colors cursor-pointer"
+            >
               Sign In
             </button>
           </div>

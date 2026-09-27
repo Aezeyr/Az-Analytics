@@ -31,7 +31,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setError(null);
     try {
       const res = await authService.signInWithGoogle();
-      if (res.user) {
+      if (res.error) {
+        setError(res.error);
+      } else if (res.user) {
         onSuccess(res.user);
         onClose();
       }

@@ -52,8 +52,12 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
             {!currentUser && (
               <button
-                onClick={onOpenGoogleAuth}
-                className="text-xs bg-white text-slate-900 hover:bg-amber-100 font-bold px-3 py-1 rounded-md transition-colors shadow-xs shrink-0 flex items-center gap-1.5"
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  onOpenGoogleAuth();
+                }}
+                className="text-xs bg-white text-slate-900 hover:bg-amber-100 font-bold px-3 py-1 rounded-md transition-colors shadow-xs shrink-0 flex items-center gap-1.5 cursor-pointer"
               >
                 <span>Sign in with Google</span>
               </button>
@@ -220,14 +224,22 @@ export const Navbar: React.FC<NavbarProps> = ({
           ) : (
             <div className="flex items-center gap-2">
               <button
-                onClick={onOpenAuth}
-                className="hidden sm:inline-flex px-3.5 py-1.5 text-xs font-medium text-slate-300 hover:text-white transition-colors"
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  onOpenAuth();
+                }}
+                className="hidden sm:inline-flex px-3.5 py-1.5 text-xs font-medium text-slate-300 hover:text-white transition-colors cursor-pointer"
               >
                 Sign In
               </button>
               <button
-                onClick={onOpenGoogleAuth}
-                className="flex items-center gap-2 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-sm transition-all"
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  onOpenGoogleAuth();
+                }}
+                className="flex items-center gap-2 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-sm transition-all cursor-pointer"
               >
                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24">
                   <path
