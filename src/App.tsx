@@ -87,6 +87,13 @@ export default function App() {
     setActiveTab(targetTab);
   };
 
+  const isAuthCallback =
+    typeof window !== 'undefined' &&
+    Boolean(
+      new URLSearchParams(window.location.search).get('code') ||
+      window.location.hash.includes('access_token')
+    );
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
       {/* Global Navbar */}
@@ -121,7 +128,17 @@ export default function App() {
       )}
 
       {/* Main View Render */}
-      {activeTab === 'landing' ? (
+      {isAuthCallback && !currentUser ? (
+        <main className="flex-1 flex flex-col items-center justify-center min-h-[65vh] p-8 text-center animate-in fade-in duration-200">
+          <div className="w-14 h-14 rounded-2xl bg-blue-600/15 text-blue-400 border border-blue-500/30 flex items-center justify-center mb-5 shadow-lg shadow-blue-600/10">
+            <div className="w-7 h-7 border-2 border-blue-400 border-t-white rounded-full animate-spin" />
+          </div>
+          <h2 className="text-xl font-bold text-white mb-2">Authenticating with Google</h2>
+          <p className="text-xs text-slate-400 max-w-sm leading-relaxed">
+            Verifying your Google session with Supabase and launching your workspace...
+          </p>
+        </main>
+      ) : activeTab === 'landing' ? (
         <main className="flex-1">
           <LandingPage
             onEnterDemo={handleEnterDemo}

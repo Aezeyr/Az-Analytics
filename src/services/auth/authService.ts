@@ -100,6 +100,7 @@ class AuthService {
 
   /**
    * Cleans up OAuth hash fragments, error strings, or trailing # from the address bar.
+   * Note: Never delete ?code= here! Supabase PKCE flow exchanges and removes it automatically.
    */
   private cleanupAuthParams() {
     if (typeof window === 'undefined') return;
@@ -108,10 +109,7 @@ class AuthService {
       const url = new URL(window.location.href);
       let modified = false;
 
-      if (url.searchParams.has('code')) {
-        url.searchParams.delete('code');
-        modified = true;
-      }
+      // DO NOT delete 'code'! Supabase PKCE exchange handles that after completing the exchange.
 
       if (url.hash) {
         if (url.hash.includes('error_description=')) {
