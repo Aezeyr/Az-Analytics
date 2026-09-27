@@ -1,7 +1,6 @@
 import { UserProfile } from '../../types';
 import {
   supabase,
-  getSupabaseClient,
   getSupabaseConfig,
   isSupabaseConfigured,
   signInWithGoogleOAuth,
@@ -20,7 +19,7 @@ class AuthService {
   constructor() {
     this.loadInitialUser();
     this.initSupabaseAuthListener();
-    this.cleanupHashIfPresent();
+    this.cleanupAuthParams();
   }
 
   private loadInitialUser() {
@@ -34,39 +33,45 @@ class AuthService {
     }
   }
 
+  /**
+   * Initializes Supabase session listener.
+   * Automatically handles sessions returned via PKCE or URL hash tokens.
+   */
   private initSupabaseAuthListener() {
     if (this.initialized || typeof window === 'undefined') return;
     this.initialized = true;
 
-    if (isSupabaseConfigured()) {
-      const client = getSupabaseClient() || supabase;
-
-      client.auth.onAuthStateChange(async (event, session) => {
-        if (session?.user) {
-          if (session.access_token) {
-            localStorage.setItem(AUTH_TOKEN_KEY, session.access_token);
-          }
-          this.setUserFromSupabase(session.user);
-          this.cleanupHashIfPresent();
-        } else if (event === 'SIGNED_OUT') {
-          this.currentUser = null;
-          localStorage.removeItem(AUTH_STORAGE_KEY);
-          localStorage.removeItem(AUTH_TOKEN_KEY);
-          this.notify();
+    // Listen for auth state changes (e.g., SIGNED_IN after Google OAuth redirect)
+    supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        if (session.access_token) {
+          localStorage.setItem(AUTH_TOKEN_KEY, session.access_token);
         }
-      });
+        this.setUserFromSupabase(session.user);
+        this.cleanupAuthParams();
+      } else if (event === 'SIGNED_OUT') {
+        this.currentUser = null;
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+        localStorage.removeItem(AUTH_TOKEN_KEY);
+        this.notify();
+      }
+    });
 
-      client.auth.getSession().then(({ data: { session } }) => {
-        if (session?.user) {
-          this.setUserFromSupabase(session.user);
-          this.cleanupHashIfPresent();
-        }
-      }).catch((err) => {
-        console.warn('[AuthService] Could not restore Supabase session:', err);
-      });
-    }
+    // Hydrate existing session on page load/refresh
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        this.setUserFromSupabase(session.user);
+        this.cleanupAuthParams();
+      }
+    }).catch((err) => {
+      console.warn('[AuthService] Could not restore Supabase session:', err);
+    });
   }
 
+  /**
+   * Maps a Supabase Auth User object into AZ Analytics UserProfile.
+   * Ensures isDemoUser is strictly FALSE so user accesses the full authenticated workspace.
+   */
   private setUserFromSupabase(sbUser: SupabaseUser) {
     const email = sbUser.email || 'user@example.com';
     const metadata = sbUser.user_metadata || {};
@@ -94,19 +99,34 @@ class AuthService {
     this.notify();
   }
 
-  private cleanupHashIfPresent() {
+  /**
+   * Cleans up OAuth hash fragments, error strings, or trailing # from the address bar.
+   */
+  private cleanupAuthParams() {
     if (typeof window === 'undefined') return;
 
     try {
-      const href = window.location.href;
-      const hash = window.location.hash;
+      const url = new URL(window.location.href);
+      let modified = false;
 
-      if (hash && hash.includes('error_description=')) {
-        const params = new URLSearchParams(hash.startsWith('#') ? hash.substring(1) : hash);
-        console.error('[Supabase OAuth Error]:', params.get('error_description') || params.get('error'));
-        window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
-      } else if (href.endsWith('#') || href.endsWith('/#')) {
-        window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
+      if (url.searchParams.has('code')) {
+        url.searchParams.delete('code');
+        modified = true;
+      }
+
+      if (url.hash) {
+        if (url.hash.includes('error_description=')) {
+          const params = new URLSearchParams(url.hash.startsWith('#') ? url.hash.substring(1) : url.hash);
+          console.error('[Supabase OAuth Error]:', params.get('error_description') || params.get('error'));
+        }
+        url.hash = '';
+        modified = true;
+      }
+
+      const href = window.location.href;
+      if (modified || href.endsWith('#') || href.endsWith('/#')) {
+        const cleanPath = url.pathname + (url.searchParams.toString() ? '?' + url.searchParams.toString() : '');
+        window.history.replaceState(null, document.title, cleanPath || '/');
       }
     } catch {
       // Ignore
@@ -133,42 +153,60 @@ class AuthService {
     this.listeners.forEach((cb) => cb(this.currentUser));
   }
 
+  /**
+   * Initiates real Google OAuth flow with Supabase.
+   * Performs direct OAuth redirect to Google without mock fallback.
+   */
   public async signInWithGoogle(): Promise<{ user?: UserProfile; error?: string }> {
-    if (isSupabaseConfigured()) {
-      try {
-        await signInWithGoogleOAuth();
-        return {};
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'Unable to initiate Google sign-in';
-        console.error('[Supabase OAuth Trigger Error]:', message);
-        return { error: message };
-      }
+    try {
+      await signInWithGoogleOAuth();
+      return {};
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unable to initiate Google sign-in';
+      console.error('[Supabase OAuth Trigger Error]:', message);
+      return { error: message };
     }
+  }
 
-    const mockGoogleUser: UserProfile = {
-      id: 'usr_g_' + Math.random().toString(36).substring(2, 9),
-      email: 'demo.analyst@example.com',
-      fullName: 'Alex Morgan',
-      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-      createdAt: new Date().toISOString(),
-      role: 'Growth Strategist',
-      isDemoUser: false,
-    };
+  public async signInWithEmail(email: string, password: string): Promise<{ user?: UserProfile; error?: string }> {
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      if (data.user) {
+        this.setUserFromSupabase(data.user);
+        return { user: this.currentUser! };
+      }
+      return { error: 'No user returned from authentication' };
+    } catch (err: any) {
+      return { error: err?.message || 'Failed to sign in' };
+    }
+  }
 
-    this.currentUser = mockGoogleUser;
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(mockGoogleUser));
-    this.notify();
-    return { user: mockGoogleUser };
+  public async signUpWithEmail(email: string, password: string, fullName: string): Promise<{ user?: UserProfile; error?: string }> {
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { full_name: fullName },
+        },
+      });
+      if (error) throw error;
+      if (data.user) {
+        this.setUserFromSupabase(data.user);
+        return { user: this.currentUser! };
+      }
+      return { error: 'Please check your email to confirm registration.' };
+    } catch (err: any) {
+      return { error: err?.message || 'Failed to sign up' };
+    }
   }
 
   public async signOut(): Promise<void> {
-    if (isSupabaseConfigured()) {
-      try {
-        const client = getSupabaseClient() || supabase;
-        await client.auth.signOut();
-      } catch (err) {
-        console.warn('[AuthService] Supabase sign out warning:', err);
-      }
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.warn('[AuthService] Supabase sign out warning:', err);
     }
     this.currentUser = null;
     localStorage.removeItem(AUTH_STORAGE_KEY);

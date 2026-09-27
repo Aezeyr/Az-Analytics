@@ -1,6 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { supabase, getSupabaseConfig, signInWithGoogleOAuth } from './lib/supabase';
 
-const supabaseUrl = 'https://svsvhoaeqhrylknunkra.supabase.co'
-const supabaseAnonKey = 'sb_publishable_K_MbKjRgK_wqrehjecb6_w_6UzLS0MD'
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export { supabase, getSupabaseConfig, signInWithGoogleOAuth };
+export default supabase;

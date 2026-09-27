@@ -6,9 +6,13 @@ export interface SupabaseConfig {
   isConfigured: boolean;
 }
 
+// Configured Supabase project credentials (with environment variable support)
+const DEFAULT_SUPABASE_URL = 'https://svsvhoaeqhrylknunkra.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_K_MbKjRgK_wqrehjecb6_w_6UzLS0MD';
+
 export const getSupabaseConfig = (): SupabaseConfig => {
-  const url = (import.meta.env.VITE_SUPABASE_URL || '').trim().replace(/\/+$/, '');
-  const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
+  const url = (import.meta.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL).trim().replace(/\/+$/, '');
+  const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY).trim();
 
   const isConfigured = Boolean(
     url &&
@@ -24,55 +28,28 @@ export const isSupabaseConfigured = (): boolean => {
   return getSupabaseConfig().isConfigured;
 };
 
-let cachedClient: SupabaseClient | null = null;
+const config = getSupabaseConfig();
 
-export const getSupabaseClient = (): SupabaseClient | null => {
-  const config = getSupabaseConfig();
-  if (!config.isConfigured) return null;
+export const supabase: SupabaseClient = createClient(config.url, config.anonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    flowType: 'pkce',
+    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+  },
+});
 
-  if (!cachedClient) {
-    cachedClient = createClient(config.url, config.anonKey, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: true,
-        flowType: 'pkce',
-        storage: typeof window !== 'undefined' ? window.localStorage : undefined,
-      },
-    });
-  }
-  return cachedClient;
+export const getSupabaseClient = (): SupabaseClient => {
+  return supabase;
 };
 
-export const supabase: SupabaseClient = (() => {
-  const active = getSupabaseClient();
-  if (active) return active;
-
-  return createClient(
-    'https://placeholder-project.supabase.co',
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder-anon-key',
-    {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-        detectSessionInUrl: false,
-      },
-    }
-  );
-})();
-
 export const signInWithGoogleOAuth = async (customRedirectTo?: string) => {
-  const config = getSupabaseConfig();
-  if (!config.isConfigured) {
-    throw new Error('Supabase is not configured. Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY.');
-  }
-
-  const client = getSupabaseClient() || supabase;
   const redirectTarget =
     customRedirectTo ||
     (typeof window !== 'undefined' ? `${window.location.origin}/` : undefined);
 
-  const { data, error } = await client.auth.signInWithOAuth({
+  const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
       redirectTo: redirectTarget,
@@ -95,7 +72,6 @@ export const signInWithGoogleOAuth = async (customRedirectTo?: string) => {
   return data;
 };
 
-// --- Added missing exports to fix Cloudflare Build Error ---
 export const getGoogleOAuthUrl = (): string => {
   const config = getSupabaseConfig();
   const redirectUrl = typeof window !== 'undefined' ? `${window.location.origin}/` : '';
@@ -103,7 +79,6 @@ export const getGoogleOAuthUrl = (): string => {
 };
 
 export const fetchSupabaseUser = async () => {
-  const client = getSupabaseClient() || supabase;
-  const { data } = await client.auth.getUser();
+  const { data } = await supabase.auth.getUser();
   return data.user;
 };

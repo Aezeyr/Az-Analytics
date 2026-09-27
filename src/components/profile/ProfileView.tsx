@@ -5,7 +5,7 @@ import { DemoBadge } from '../common/DemoBadge';
 
 interface ProfileViewProps {
   currentUser: UserProfile | null;
-  onOpenGoogleAuth: () => void;
+  onOpenGoogleAuth?: () => void;
   isDemoMode: boolean;
 }
 
@@ -39,19 +39,6 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               Manage your personal credentials, workspace role, and security preferences.
             </p>
           </div>
-
-          {!currentUser && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                onOpenGoogleAuth();
-              }}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-            >
-              Sign in with Google
-            </button>
-          )}
         </div>
       </div>
 

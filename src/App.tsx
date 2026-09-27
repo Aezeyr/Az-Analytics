@@ -49,15 +49,9 @@ export default function App() {
 
   const handleOpenGoogleAuth = async () => {
     try {
-      const res = await supabase.auth.signInWithOAuth({ provider: 'google'})
-      if (res.user) {
-        setCurrentUser(res.user);
-        setActiveTab('dashboard');
-        setIsAuthModalOpen(false);
-        setIsProtectedGateOpen(false);
-      }
-    } catch {
-      // Fallback
+      await authService.signInWithGoogle();
+    } catch (err) {
+      console.error('[App] Google OAuth failed to initiate:', err);
     }
   };
 

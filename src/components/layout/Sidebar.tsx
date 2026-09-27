@@ -22,7 +22,7 @@ interface SidebarProps {
   onSelectTab: (tab: string) => void;
   currentUser: UserProfile | null;
   onSignOut: () => void;
-  onOpenGoogleAuth: () => void;
+  onOpenGoogleAuth?: () => void;
   isMobileOpen: boolean;
   onCloseMobile: () => void;
 }
@@ -102,20 +102,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </div>
         ) : (
-          <div className="text-center py-1">
-            <span className="inline-block px-2 py-0.5 text-[10px] font-bold uppercase rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 mb-2">
+          <div className="text-center py-1.5">
+            <span className="inline-block px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20">
               Guest Demo Mode
             </span>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                onOpenGoogleAuth();
-              }}
-              className="w-full py-1.5 px-3 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-            >
-              <span>Sign in with Google</span>
-            </button>
           </div>
         )}
       </div>

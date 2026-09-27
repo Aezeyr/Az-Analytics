@@ -53,13 +53,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       if (mode === 'signup') {
         const res = await authService.signUpWithEmail(email, password, fullName);
         if (res.error) throw new Error(res.error);
-        onSuccess(res.user);
-        onClose();
+        if (res.user) {
+          onSuccess(res.user);
+          onClose();
+        }
       } else if (mode === 'signin') {
         const res = await authService.signInWithEmail(email, password);
         if (res.error) throw new Error(res.error);
-        onSuccess(res.user);
-        onClose();
+        if (res.user) {
+          onSuccess(res.user);
+          onClose();
+        }
       } else {
         // Forgot password
         setForgotSubmitted(true);
