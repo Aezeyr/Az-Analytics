@@ -14,11 +14,14 @@ type AuthStateCallback = (user: UserProfile | null) => void;
 class AuthService {
   private listeners: AuthStateCallback[] = [];
   private currentUser: UserProfile | null = null;
-  private initialized: boolean = false;
+  private isInitialized: boolean = false;
+  private urlError: string | null = null;
+  private initPromise: Promise<void>;
 
   constructor() {
     this.loadInitialUser();
     this.initSupabaseAuthListener();
+    this.initPromise = this.processAuthInit();
   }
 
   private loadInitialUser() {
@@ -33,21 +36,56 @@ class AuthService {
   }
 
   /**
-   * Initializes Supabase session listener.
-   * Automatically handles sessions returned via PKCE or URL hash tokens.
+   * Cleans authentication parameters (code, error, state) and hash tokens from the address bar
+   * without triggering a page reload or leaving a trailing '#' symbol.
+   */
+  private cleanAuthParamsFromUrl() {
+    if (typeof window === 'undefined') return;
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('code');
+      url.searchParams.delete('error');
+      url.searchParams.delete('error_description');
+      url.searchParams.delete('error_code');
+      url.searchParams.delete('state');
+
+      const search = url.searchParams.toString() ? `?${url.searchParams.toString()}` : '';
+      const cleanPath = `${url.pathname}${search}`;
+      window.history.replaceState(window.history.state, document.title, cleanPath || '/');
+    } catch {
+      // Ignore
+    }
+  }
+
+  /**
+   * Removes any stray trailing '#' or '/#' from the address bar.
+   */
+  private cleanTrailingHash() {
+    if (typeof window === 'undefined') return;
+    try {
+      const href = window.location.href;
+      if (href.endsWith('#') || href.endsWith('/#') || window.location.hash === '#') {
+        const cleanPath = window.location.pathname + (window.location.search || '');
+        window.history.replaceState(window.history.state, document.title, cleanPath || '/');
+      }
+    } catch {
+      // Ignore
+    }
+  }
+
+  /**
+   * Initializes Supabase session listener for live auth events (e.g. sign-in, token refresh, sign-out).
    */
   private initSupabaseAuthListener() {
-    if (this.initialized || typeof window === 'undefined') return;
-    this.initialized = true;
+    if (typeof window === 'undefined') return;
 
-    // Listen for auth state changes (e.g., SIGNED_IN after Google OAuth redirect)
     supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
         if (session.access_token) {
           localStorage.setItem(AUTH_TOKEN_KEY, session.access_token);
         }
         this.setUserFromSupabase(session.user);
-        this.cleanupAuthParams();
+        this.cleanTrailingHash();
       } else if (event === 'SIGNED_OUT') {
         this.currentUser = null;
         localStorage.removeItem(AUTH_STORAGE_KEY);
@@ -55,16 +93,130 @@ class AuthService {
         this.notify();
       }
     });
+  }
 
-    // Hydrate existing session on page load/refresh
-    supabase.auth.getSession().then(({ data: { session } }) => {
+  /**
+   * Comprehensive authentication initialization:
+   * 1. Inspects URL for OAuth error parameters and records them.
+   * 2. Inspects hash for implicit tokens (#access_token=...) and sets session.
+   * 3. Inspects query for PKCE code (?code=...) and exchanges it for a session.
+   * 4. Hydrates and verifies the active Supabase session.
+   * 5. Cleans URL parameters cleanly without leaving '#'.
+   */
+  private async processAuthInit(): Promise<void> {
+    if (typeof window === 'undefined') {
+      this.isInitialized = true;
+      return;
+    }
+
+    try {
+      // 1. Check for error in query or hash fragment
+      const detectedError = this.checkUrlAuthError();
+      if (detectedError) {
+        this.urlError = detectedError;
+        this.cleanAuthParamsFromUrl();
+        this.cleanTrailingHash();
+        this.notify();
+        return;
+      }
+
+      // 2. Handle Implicit Grant callback (#access_token=...&refresh_token=...)
+      // If Supabase returned tokens in hash fragment, set session directly
+      if (window.location.hash && window.location.hash.includes('access_token')) {
+        const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+        const accessToken = hashParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token');
+
+        if (accessToken) {
+          const { data, error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken || '',
+          });
+
+          if (!error && data?.session?.user) {
+            this.setUserFromSupabase(data.session.user);
+            this.cleanAuthParamsFromUrl();
+            this.cleanTrailingHash();
+            return;
+          } else if (error) {
+            console.error('[AuthService] Error setting session from hash tokens:', error);
+            this.urlError = error.message;
+          }
+        }
+      }
+
+      // 3. Handle PKCE OAuth callback (?code=...)
+      const urlParams = new URLSearchParams(window.location.search);
+      const code = urlParams.get('code');
+
+      if (code) {
+        // First check if GoTrue client already exchanged the code
+        const { data: currentSessionData } = await supabase.auth.getSession();
+        if (currentSessionData?.session?.user) {
+          this.setUserFromSupabase(currentSessionData.session.user);
+          this.cleanAuthParamsFromUrl();
+          this.cleanTrailingHash();
+          return;
+        }
+
+        // If not yet hydrated, explicitly exchange code for session
+        try {
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+          if (!error && data?.session?.user) {
+            this.setUserFromSupabase(data.session.user);
+            this.cleanAuthParamsFromUrl();
+            this.cleanTrailingHash();
+            return;
+          } else if (error) {
+            // Check retry session in case GoTrue processed it concurrently
+            const retrySession = await supabase.auth.getSession();
+            if (retrySession.data?.session?.user) {
+              this.setUserFromSupabase(retrySession.data.session.user);
+              this.cleanAuthParamsFromUrl();
+              this.cleanTrailingHash();
+              return;
+            }
+            console.error('[AuthService] PKCE exchange error:', error.message);
+            this.urlError = error.message;
+          }
+        } catch (exchangeErr: any) {
+          console.warn('[AuthService] Exception exchanging code for session:', exchangeErr);
+          const retrySession = await supabase.auth.getSession();
+          if (retrySession.data?.session?.user) {
+            this.setUserFromSupabase(retrySession.data.session.user);
+            this.cleanAuthParamsFromUrl();
+            this.cleanTrailingHash();
+            return;
+          }
+          this.urlError = exchangeErr?.message || 'Failed to complete Google authentication code exchange.';
+        }
+        this.cleanAuthParamsFromUrl();
+      }
+
+      // 4. Hydrate existing persisted session on page load / refresh
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       if (session?.user) {
         this.setUserFromSupabase(session.user);
-        this.cleanupAuthParams();
+      } else {
+        // If Supabase has no active session, clear any stale cached user
+        if (this.currentUser) {
+          this.currentUser = null;
+          localStorage.removeItem(AUTH_STORAGE_KEY);
+          localStorage.removeItem(AUTH_TOKEN_KEY);
+          this.notify();
+        }
       }
-    }).catch((err) => {
-      console.warn('[AuthService] Could not restore Supabase session:', err);
-    });
+
+      if (sessionError) {
+        console.warn('[AuthService] Could not restore Supabase session:', sessionError);
+      }
+    } catch (err: any) {
+      console.error('[AuthService] Unexpected initialization error:', err);
+    } finally {
+      this.isInitialized = true;
+      this.cleanTrailingHash();
+      this.notify();
+    }
   }
 
   /**
@@ -99,38 +251,6 @@ class AuthService {
   }
 
   /**
-   * Cleans up OAuth hash fragments, error strings, or trailing # from the address bar.
-   * Note: Never delete ?code= here! Supabase PKCE flow exchanges and removes it automatically.
-   */
-  private cleanupAuthParams() {
-    if (typeof window === 'undefined') return;
-
-    try {
-      const url = new URL(window.location.href);
-      let modified = false;
-
-      // DO NOT delete 'code'! Supabase PKCE exchange handles that after completing the exchange.
-
-      if (url.hash) {
-        if (url.hash.includes('error_description=')) {
-          const params = new URLSearchParams(url.hash.startsWith('#') ? url.hash.substring(1) : url.hash);
-          console.error('[Supabase OAuth Error]:', params.get('error_description') || params.get('error'));
-        }
-        url.hash = '';
-        modified = true;
-      }
-
-      const href = window.location.href;
-      if (modified || href.endsWith('#') || href.endsWith('/#')) {
-        const cleanPath = url.pathname + (url.searchParams.toString() ? '?' + url.searchParams.toString() : '');
-        window.history.replaceState(null, document.title, cleanPath || '/');
-      }
-    } catch {
-      // Ignore
-    }
-  }
-
-  /**
    * Reads any OAuth error returned in the URL query or hash fragment.
    */
   public checkUrlAuthError(): string | null {
@@ -162,6 +282,15 @@ class AuthService {
       // Ignore
     }
     return null;
+  }
+
+  public isReady(): boolean {
+    return this.isInitialized;
+  }
+
+  public async waitForInit(): Promise<{ user: UserProfile | null; error: string | null }> {
+    await this.initPromise;
+    return { user: this.currentUser, error: this.urlError };
   }
 
   public getCurrentUser(): UserProfile | null {

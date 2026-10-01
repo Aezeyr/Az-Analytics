@@ -19,6 +19,7 @@ import { ProtectedGateModal } from './components/common/ProtectedGateModal';
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => authService.getCurrentUser());
   const [authError, setAuthError] = useState<string | null>(() => authService.checkUrlAuthError());
+  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(() => !authService.isReady());
   const [isSigningInGoogle, setIsSigningInGoogle] = useState(false);
   const [activeTab, setActiveTab] = useState<string>(() => {
     if (typeof window !== 'undefined') {
@@ -34,6 +35,10 @@ export default function App() {
       ) {
         return 'dashboard';
       }
+      const savedTab = sessionStorage.getItem('az_analytics_active_tab');
+      if (savedTab && authService.getCurrentUser()) {
+        return savedTab;
+      }
     }
     return authService.getCurrentUser() ? 'dashboard' : 'landing';
   });
@@ -45,13 +50,46 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = authService.onAuthStateChange((user) => {
       setCurrentUser(user);
-      // If user logs in while on landing, redirect to dashboard
-      if (user && activeTab === 'landing') {
-        setActiveTab('dashboard');
+      if (user) {
+        setActiveTab((prev) => (prev === 'landing' ? 'dashboard' : prev));
       }
     });
+
+    authService.waitForInit().then(({ user, error }) => {
+      if (error) {
+        setAuthError(error);
+      }
+      setCurrentUser(user);
+      if (user) {
+        let targetTab = 'dashboard';
+        try {
+          const savedTab = sessionStorage.getItem('az_analytics_active_tab');
+          if (savedTab && savedTab !== 'landing') {
+            targetTab = savedTab;
+          }
+        } catch {
+          // Ignore
+        }
+        setActiveTab((prev) => (prev === 'landing' ? targetTab : prev));
+      } else {
+        setActiveTab((prev) => (prev === 'dashboard' && !user ? 'landing' : prev));
+      }
+      setIsAuthLoading(false);
+    });
+
     return unsubscribe;
-  }, [activeTab]);
+  }, []);
+
+  const handleSelectTab = (tab: string) => {
+    setActiveTab(tab);
+    if (tab !== 'landing') {
+      try {
+        sessionStorage.setItem('az_analytics_active_tab', tab);
+      } catch {
+        // Ignore
+      }
+    }
+  };
 
   const handleOpenGoogleAuth = async () => {
     setIsSigningInGoogle(true);
@@ -80,19 +118,17 @@ export default function App() {
   const handleSignOut = async () => {
     await authService.signOut();
     setCurrentUser(null);
+    try {
+      sessionStorage.removeItem('az_analytics_active_tab');
+    } catch {
+      // Ignore
+    }
     setActiveTab('landing');
   };
 
   const handleEnterDemo = (targetTab: string = 'dashboard') => {
-    setActiveTab(targetTab);
+    handleSelectTab(targetTab);
   };
-
-  const isAuthCallback =
-    typeof window !== 'undefined' &&
-    Boolean(
-      new URLSearchParams(window.location.search).get('code') ||
-      window.location.hash.includes('access_token')
-    );
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
@@ -104,7 +140,7 @@ export default function App() {
         onOpenGoogleAuth={handleOpenGoogleAuth}
         onSignOut={handleSignOut}
         onToggleSidebar={() => setIsSidebarMobileOpen(!isSidebarMobileOpen)}
-        onSelectTab={setActiveTab}
+        onSelectTab={handleSelectTab}
         activeTab={activeTab}
       />
 
@@ -128,7 +164,7 @@ export default function App() {
       )}
 
       {/* Main View Render */}
-      {isAuthCallback && !currentUser ? (
+      {isAuthLoading ? (
         <main className="flex-1 flex flex-col items-center justify-center min-h-[65vh] p-8 text-center animate-in fade-in duration-200">
           <div className="w-14 h-14 rounded-2xl bg-blue-600/15 text-blue-400 border border-blue-500/30 flex items-center justify-center mb-5 shadow-lg shadow-blue-600/10">
             <div className="w-7 h-7 border-2 border-blue-400 border-t-white rounded-full animate-spin" />
@@ -153,7 +189,7 @@ export default function App() {
           {/* Dashboard Sidebar */}
           <Sidebar
             activeTab={activeTab}
-            onSelectTab={setActiveTab}
+            onSelectTab={handleSelectTab}
             currentUser={currentUser}
             onSignOut={handleSignOut}
             onOpenGoogleAuth={handleOpenGoogleAuth}
@@ -166,7 +202,7 @@ export default function App() {
             {activeTab === 'dashboard' && (
               <DashboardHome
                 currentUser={currentUser}
-                onNavigate={setActiveTab}
+                onNavigate={handleSelectTab}
                 onOpenProtectedGate={handleOpenProtectedGate}
                 isDemoMode={!currentUser}
               />
@@ -199,7 +235,7 @@ export default function App() {
             {activeTab === 'reports' && (
               <SavedReportsView
                 currentUser={currentUser}
-                onNavigate={setActiveTab}
+                onNavigate={handleSelectTab}
                 onOpenProtectedGate={handleOpenProtectedGate}
                 isDemoMode={!currentUser}
               />
